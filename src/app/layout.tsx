@@ -4,6 +4,7 @@ import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import Header from '@/components/layout/Header';
+import NetworkStatus from '@/components/layout/NetworkStatus';
 
 const urbanist = Urbanist({
   subsets: ['latin'],
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className={cn('min-h-screen bg-background font-body antialiased', urbanist.variable)}>
         <div className="relative flex min-h-screen flex-col">
           <Header />
+          <NetworkStatus />
           <main className="flex-1">{children}</main>
         </div>
         <Toaster />

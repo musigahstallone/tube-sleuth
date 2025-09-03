@@ -33,6 +33,14 @@ async function fetcher<T>(
     return response.json();
   } catch (error) {
     console.error(`API call to ${endpoint} failed:`, error);
+    if (error instanceof TypeError && error.message.includes('fetch failed')) {
+       return {
+            status: 'Error',
+            message: 'Cannot connect to the backend service. It might be unavailable.',
+            data: null,
+            timestamp: new Date().toISOString()
+        }
+    }
     if (error instanceof Error) {
         return {
             status: 'Error',
