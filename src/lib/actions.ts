@@ -16,7 +16,7 @@ async function fetcher<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   try {
-    const response = await fetch(`${process.env.API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${process.env.API_BASE_URL || ''}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -68,7 +68,7 @@ async function fetcher<T>(
 
 export async function searchVideos(
   query: string,
-  maxResults: number = 25,
+  maxResults: number = 12,
   pageToken?: string | null,
 ): Promise<ApiResponse<VideoResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
@@ -81,26 +81,25 @@ export async function advancedSearchVideos(
 ): Promise<ApiResponse<VideoResult[]>> {
   const requestBody = { ...body };
   const pageToken = requestBody.pageToken;
+  
+  // The API expects pageToken in the query string, not the body
+  let endpoint = '/api/YouTubeSearch/videos/advanced';
+  if (pageToken) {
+    endpoint += `?pageToken=${pageToken}`;
+  }
+  
+  // The rest of the parameters go in the body
   delete requestBody.pageToken;
 
-  const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(requestBody)) {
-        if (value !== undefined && value !== null && value !== '') {
-            params.set(key, String(value));
-        }
-    }
-  if (pageToken) {
-    params.set('pageToken', pageToken);
-  }
-
-  return fetcher(`/api/YouTubeSearch/videos/advanced?${params.toString()}`, {
-    method: 'POST' // Even if params are in URL, some backends expect POST
+  return fetcher(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(requestBody),
   });
 }
 
 export async function searchChannels(
   query: string,
-  maxResults: number = 25,
+  maxResults: number = 12,
   pageToken?: string | null,
 ): Promise<ApiResponse<ChannelResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
@@ -110,7 +109,7 @@ export async function searchChannels(
 
 export async function searchPlaylists(
   query: string,
-  maxResults: number = 25,
+  maxResults: number = 12,
   pageToken?: string | null,
 ): Promise<ApiResponse<PlaylistResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
