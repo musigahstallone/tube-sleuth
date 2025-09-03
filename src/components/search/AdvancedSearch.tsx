@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import type { AdvancedSearchRequest } from '@/lib/types';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const formSchema = z.object({
   query: z.string().min(1, 'Query is required.'),
@@ -42,25 +42,40 @@ const formSchema = z.object({
 
 type AdvancedSearchProps = {
     onSearch: (data: AdvancedSearchRequest) => void;
-    defaultQuery: string;
+    defaultValues: AdvancedSearchRequest;
 }
 
-export default function AdvancedSearch({ onSearch, defaultQuery }: AdvancedSearchProps) {
+export default function AdvancedSearch({ onSearch, defaultValues }: AdvancedSearchProps) {
   const [open, setOpen] = useState(false);
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      query: defaultQuery,
-      order: 'relevance',
-      videoDuration: 'any',
-      maxResults: 25,
+        query: defaultValues.query || '',
+        order: defaultValues.order || 'relevance',
+        videoDuration: defaultValues.videoDuration || 'any',
+        maxResults: defaultValues.maxResults || 25,
+        publishedAfter: defaultValues.publishedAfter ? new Date(defaultValues.publishedAfter) : undefined,
+        publishedBefore: defaultValues.publishedBefore ? new Date(defaultValues.publishedBefore) : undefined,
     },
   });
+
+  useEffect(() => {
+    form.reset({
+        query: defaultValues.query || '',
+        order: defaultValues.order || 'relevance',
+        videoDuration: defaultValues.videoDuration || 'any',
+        maxResults: defaultValues.maxResults || 25,
+        publishedAfter: defaultValues.publishedAfter ? new Date(defaultValues.publishedAfter) : undefined,
+        publishedBefore: defaultValues.publishedBefore ? new Date(defaultValues.publishedBefore) : undefined,
+    })
+  }, [defaultValues, form]);
+
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     const searchParams: AdvancedSearchRequest = {
       ...values,
-      query: values.query || defaultQuery,
+      query: values.query || defaultValues.query,
       publishedAfter: values.publishedAfter ? values.publishedAfter.toISOString() : undefined,
       publishedBefore: values.publishedBefore ? values.publishedBefore.toISOString() : undefined,
     };

@@ -77,11 +77,24 @@ export async function searchVideos(
 }
 
 export async function advancedSearchVideos(
-  body: AdvancedSearchRequest
+  body: AdvancedSearchRequest & { pageToken?: string | null }
 ): Promise<ApiResponse<VideoResult[]>> {
-  return fetcher('/api/YouTubeSearch/videos/advanced', {
-    method: 'POST',
-    body: JSON.stringify(body),
+  const requestBody = { ...body };
+  const pageToken = requestBody.pageToken;
+  delete requestBody.pageToken;
+
+  const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(requestBody)) {
+        if (value !== undefined && value !== null && value !== '') {
+            params.set(key, String(value));
+        }
+    }
+  if (pageToken) {
+    params.set('pageToken', pageToken);
+  }
+
+  return fetcher(`/api/YouTubeSearch/videos/advanced?${params.toString()}`, {
+    method: 'POST' // Even if params are in URL, some backends expect POST
   });
 }
 
