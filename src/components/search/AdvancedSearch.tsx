@@ -37,6 +37,7 @@ const formSchema = z.object({
   publishedBefore: z.date().optional(),
   order: z.string().optional(),
   videoDuration: z.string().optional(),
+  maxResults: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 type AdvancedSearchProps = {
@@ -52,6 +53,7 @@ export default function AdvancedSearch({ onSearch, defaultQuery }: AdvancedSearc
       query: defaultQuery,
       order: 'relevance',
       videoDuration: 'any',
+      maxResults: 25,
     },
   });
 
@@ -187,6 +189,19 @@ export default function AdvancedSearch({ onSearch, defaultQuery }: AdvancedSearc
                       <SelectItem value="rating">Rating</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="maxResults"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Max Results</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="e.g., 25" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

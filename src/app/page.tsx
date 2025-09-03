@@ -17,6 +17,7 @@ import VideoCard from '@/components/search/VideoCard';
 import ChannelCard from '@/components/search/ChannelCard';
 import PlaylistCard from '@/components/search/PlaylistCard';
 import AdvancedSearch from '@/components/search/AdvancedSearch';
+import { suggestRelatedVideos } from '@/ai/flows/suggest-related-videos';
 
 type SearchResults = {
   videos: VideoResult[];
