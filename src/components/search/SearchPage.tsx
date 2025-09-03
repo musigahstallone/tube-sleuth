@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Loader2, Search, ArrowLeft, ArrowRight, AlertTriangle } from 'lucide-react';
 import VideoCard from '@/components/search/VideoCard';
 import ChannelCard from '@/components/search/ChannelCard';
 import PlaylistCard from '@/components/search/PlaylistCard';
@@ -26,6 +26,7 @@ type CacheEntry = {
     results: SearchResultData;
     nextPageToken?: string | null;
     prevPageToken?: string | null;
+    error?: string | null;
 };
 
 type SearchCache = {
@@ -45,6 +46,8 @@ type SearchAction =
   | { type: 'SET_QUERY'; payload: string }
   | { type: 'SET_ACTIVE_TAB'; payload: 'videos' | 'channels' | 'playlists' }
   | { type: 'SET_SEARCH_RESULTS'; payload: { tab: 'videos' | 'channels' | 'playlists', query: string, data: ApiResponse<any> } }
+  | { type: 'SET_SEARCH_ERROR'; payload: { tab: 'videos' | 'channels' | 'playlists', query: string, message: string } }
+  | { type: 'CLEAR_ERROR'; payload: { tab: 'videos' | 'channels' | 'playlists', query: string } }
   | { type: 'HYDRATE_STATE'; payload: Partial<SearchState> };
 
 const initialState: SearchState = {
@@ -68,12 +71,43 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
               results: data.data,
               nextPageToken: data.nextPageToken,
               prevPageToken: data.prevPageToken,
+              error: null,
           }
       };
       return { 
           ...state, 
           cache: { ...state.cache, [tab]: newCacheForTab },
       };
+    }
+    case 'SET_SEARCH_ERROR': {
+        const { tab, query, message } = action.payload;
+        const newCacheForTab = {
+            ...state.cache[tab],
+            [query]: {
+                ...state.cache[tab][query],
+                results: [],
+                error: message
+            }
+        };
+        return {
+            ...state,
+            cache: { ...state.cache, [tab]: newCacheForTab },
+        };
+    }
+    case 'CLEAR_ERROR': {
+        const { tab, query } = action.payload;
+        if (!state.cache[tab][query]) return state;
+         const newCacheForTab = {
+            ...state.cache[tab],
+            [query]: {
+                ...state.cache[tab][query],
+                error: null,
+            }
+        };
+        return {
+            ...state,
+            cache: { ...state.cache, [tab]: newCacheForTab },
+        };
     }
     case 'HYDRATE_STATE':
         return { ...state, ...action.payload, isHydrated: true };
@@ -133,6 +167,7 @@ export default function SearchPage() {
 
   const currentCacheEntry = state.cache[state.activeTab][state.query];
   const results = currentCacheEntry?.results || [];
+  const currentError = currentCacheEntry?.error;
 
   const handleSearch = useCallback(async (currentQuery: string, currentTab: 'videos' | 'channels' | 'playlists', pageToken?: string | null) => {
     if (!currentQuery) {
@@ -145,6 +180,7 @@ export default function SearchPage() {
     }
 
     startTransition(async () => {
+      dispatch({ type: 'CLEAR_ERROR', payload: { tab: currentTab, query: currentQuery } });
       try {
         let response;
         const maxResults = 12; // Fetch 12 results for better grid layout
@@ -163,17 +199,14 @@ export default function SearchPage() {
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-        toast({
-          title: 'Search Failed',
-          description: `Could not fetch ${currentTab}: ${errorMessage}`,
-          variant: 'destructive',
-        });
+        dispatch({ type: 'SET_SEARCH_ERROR', payload: { tab: currentTab, query: currentQuery, message: `Could not fetch ${currentTab}: ${errorMessage}` } });
       }
     });
   }, [toast]);
   
   const handleAdvancedSearch = (data: AdvancedSearchRequest) => {
     startTransition(async () => {
+       dispatch({ type: 'CLEAR_ERROR', payload: { tab: 'videos', query: data.query } });
       try {
         const response = await advancedSearchVideos({...data, maxResults: 12 });
         if (response.data) {
@@ -185,11 +218,7 @@ export default function SearchPage() {
         }
       } catch (error) {
          const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-        toast({
-          title: 'Advanced Search Failed',
-          description: `Could not fetch videos: ${errorMessage}`,
-          variant: 'destructive',
-        });
+         dispatch({ type: 'SET_SEARCH_ERROR', payload: { tab: 'videos', query: data.query, message: `Could not fetch videos: ${errorMessage}` } });
       }
     });
   };
@@ -214,7 +243,7 @@ export default function SearchPage() {
   }
 
   const renderPagination = () => {
-    if (!currentCacheEntry || isPending) return null;
+    if (!currentCacheEntry || isPending || currentError) return null;
     return (
         <div className="flex justify-center items-center gap-4 mt-8">
             <Button 
@@ -234,7 +263,9 @@ export default function SearchPage() {
   }
   
   const renderContent = (tab: 'videos' | 'channels' | 'playlists') => {
-    const tabResults = state.cache[tab][state.query]?.results || [];
+    const tabCacheEntry = state.cache[tab][state.query];
+    const tabResults = tabCacheEntry?.results || [];
+    const tabError = tabCacheEntry?.error;
 
     if (!state.isHydrated) {
         return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -243,6 +274,17 @@ export default function SearchPage() {
     if (isPending && state.activeTab === tab) {
       return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
     }
+
+    if (tabError) {
+        return (
+            <div className="text-center text-destructive mt-16 flex flex-col items-center gap-4">
+                <AlertTriangle className="w-10 h-10" />
+                <p className="font-semibold">An Error Occurred</p>
+                <p className="text-sm max-w-md">{tabError}</p>
+            </div>
+        )
+    }
+
     if(tabResults.length === 0 && state.query) {
       return <div className="text-center text-muted-foreground mt-16"><p>No results found for "{state.query}".</p></div>
     }
@@ -300,7 +342,7 @@ export default function SearchPage() {
       
       {renderPagination()}
 
-      { !isPending && results.length === 0 && !state.query && state.isHydrated &&
+      { !isPending && results.length === 0 && !state.query && state.isHydrated && !currentError &&
         <div className="text-center text-muted-foreground mt-16">
           <p>Ready to start your search.</p>
           <p className="text-sm">Enter a term above to begin exploring YouTube.</p>
