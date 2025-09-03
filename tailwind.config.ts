@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Urbanist', 'sans-serif'],
-        headline: ['Urbanist', 'sans-serif'],
+        body: ['Story Script', 'cursive'],
+        headline: ['Story Script', 'cursive'],
         code: ['monospace'],
       },
       colors: {

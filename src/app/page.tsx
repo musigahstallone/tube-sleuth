@@ -1,42 +1,96 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useCallback, useReducer } from 'react';
 import {
   searchVideos,
   advancedSearchVideos,
   searchChannels,
   searchPlaylists,
 } from '@/lib/actions';
-import type { VideoResult, ChannelResult, PlaylistResult, AdvancedSearchRequest } from '@/lib/types';
+import type { VideoResult, ChannelResult, PlaylistResult, AdvancedSearchRequest, ApiResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
 import VideoCard from '@/components/search/VideoCard';
 import ChannelCard from '@/components/search/ChannelCard';
 import PlaylistCard from '@/components/search/PlaylistCard';
 import AdvancedSearch from '@/components/search/AdvancedSearch';
 import { suggestRelatedVideos } from '@/ai/flows/suggest-related-videos';
 
-type SearchResults = {
-  videos: VideoResult[];
-  channels: ChannelResult[];
-  playlists: PlaylistResult[];
+type SearchResultData = VideoResult[] | ChannelResult[] | PlaylistResult[];
+
+type CacheEntry = {
+    results: SearchResultData;
+    nextPageToken?: string | null;
+    prevPageToken?: string | null;
 };
 
+type SearchCache = {
+  videos: Record<string, CacheEntry>;
+  channels: Record<string, CacheEntry>;
+  playlists: Record<string, CacheEntry>;
+};
+
+type SearchState = {
+  query: string;
+  activeTab: 'videos' | 'channels' | 'playlists';
+  cache: SearchCache;
+  currentPageToken: string | null;
+};
+
+type SearchAction =
+  | { type: 'SET_QUERY'; payload: string }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'videos' | 'channels' | 'playlists' }
+  | { type: 'SET_SEARCH_RESULTS'; payload: { tab: 'videos' | 'channels' | 'playlists', query: string, data: ApiResponse<any> } }
+  | { type: 'SET_CURRENT_PAGE_TOKEN'; payload: string | null };
+
+const initialState: SearchState = {
+  query: '',
+  activeTab: 'videos',
+  cache: { videos: {}, channels: {}, playlists: {} },
+  currentPageToken: null,
+};
+
+function searchReducer(state: SearchState, action: SearchAction): SearchState {
+  switch (action.type) {
+    case 'SET_QUERY':
+      return { ...state, query: action.payload, currentPageToken: null };
+    case 'SET_ACTIVE_TAB':
+      return { ...state, activeTab: action.payload, currentPageToken: state.cache[action.payload][state.query]?.nextPageToken || null };
+    case 'SET_SEARCH_RESULTS': {
+      const { tab, query, data } = action.payload;
+      const newCacheForTab = {
+          ...state.cache[tab],
+          [query]: {
+              results: data.data,
+              nextPageToken: data.nextPageToken,
+              prevPageToken: data.prevPageToken,
+          }
+      };
+      return { 
+          ...state, 
+          cache: { ...state.cache, [tab]: newCacheForTab },
+          currentPageToken: data.nextPageToken || null,
+      };
+    }
+    case 'SET_CURRENT_PAGE_TOKEN':
+        return { ...state, currentPageToken: action.payload };
+    default:
+      return state;
+  }
+}
+
 export default function Home() {
-  const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('videos');
-  const [results, setResults] = useState<SearchResults>({
-    videos: [],
-    channels: [],
-    playlists: [],
-  });
+  const [state, dispatch] = useReducer(searchReducer, initialState);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
 
-  const handleSearch = (currentQuery: string, currentTab: string) => {
+  const currentCacheEntry = state.cache[state.activeTab][state.query];
+  const results = currentCacheEntry?.results || [];
+
+  const handleSearch = useCallback(async (currentQuery: string, currentTab: 'videos' | 'channels' | 'playlists', pageToken?: string | null) => {
     if (!currentQuery) {
       toast({
         title: 'Search query is empty',
@@ -49,16 +103,17 @@ export default function Home() {
     startTransition(async () => {
       try {
         let response;
+        const maxResults = 12;
         if (currentTab === 'videos') {
-          response = await searchVideos(currentQuery);
+          response = await searchVideos(currentQuery, maxResults, pageToken);
         } else if (currentTab === 'channels') {
-          response = await searchChannels(currentQuery);
+          response = await searchChannels(currentQuery, maxResults, pageToken);
         } else {
-          response = await searchPlaylists(currentQuery);
+          response = await searchPlaylists(currentQuery, maxResults, pageToken);
         }
 
         if (response.data) {
-          setResults((prev) => ({ ...prev, [currentTab]: response.data }));
+          dispatch({ type: 'SET_SEARCH_RESULTS', payload: { tab: currentTab, query: currentQuery, data: response } });
         } else {
           throw new Error(response.message || 'No data returned');
         }
@@ -71,14 +126,16 @@ export default function Home() {
         });
       }
     });
-  };
+  }, [toast]);
   
   const handleAdvancedSearch = (data: AdvancedSearchRequest) => {
     startTransition(async () => {
       try {
-        const response = await advancedSearchVideos(data);
+        const response = await advancedSearchVideos({...data, maxResults: 12 });
         if (response.data) {
-          setResults((prev) => ({ ...prev, videos: response.data }));
+          dispatch({ type: 'SET_SEARCH_RESULTS', payload: { tab: 'videos', query: data.query, data: response } });
+          dispatch({ type: 'SET_QUERY', payload: data.query });
+          dispatch({ type: 'SET_ACTIVE_TAB', payload: 'videos' });
         } else {
           throw new Error(response.message || 'No data returned');
         }
@@ -95,16 +152,61 @@ export default function Home() {
 
   const onFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    handleSearch(query, activeTab);
+    handleSearch(state.query, state.activeTab);
   };
 
   const onTabChange = (value: string) => {
-    setActiveTab(value);
-    if (query) {
-      // Re-run search for the new tab if a query already exists
-      handleSearch(query, value);
+    const newTab = value as 'videos' | 'channels' | 'playlists';
+    dispatch({ type: 'SET_ACTIVE_TAB', payload: newTab });
+    if (state.query && !state.cache[newTab][state.query]) {
+      handleSearch(state.query, newTab);
     }
   };
+
+  const handlePageChange = (token: string | null | undefined) => {
+      if (token) {
+          handleSearch(state.query, state.activeTab, token);
+      }
+  }
+
+  const renderPagination = () => {
+    if (!currentCacheEntry || isPending) return null;
+    return (
+        <div className="flex justify-center items-center gap-4 mt-8">
+            <Button 
+                onClick={() => handlePageChange(currentCacheEntry.prevPageToken)}
+                disabled={!currentCacheEntry.prevPageToken || isPending}
+            >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+            </Button>
+            <Button 
+                onClick={() => handlePageChange(currentCacheEntry.nextPageToken)}
+                disabled={!currentCacheEntry.nextPageToken || isPending}
+            >
+                Next <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+        </div>
+    );
+  }
+
+  const renderContent = (tab: 'videos' | 'channels' | 'playlists') => {
+      const tabResults = state.cache[tab][state.query]?.results || [];
+      
+      if (isPending && state.activeTab === tab) {
+        return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+      }
+      if(tabResults.length === 0 && state.query) {
+        return <div className="text-center text-muted-foreground mt-16"><p>No results found for "{state.query}".</p></div>
+      }
+
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
+          {tab === 'videos' && (tabResults as VideoResult[]).map((video) => <VideoCard key={video.videoId} video={video} />)}
+          {tab === 'channels' && (tabResults as ChannelResult[]).map((channel) => <ChannelCard key={channel.channelId} channel={channel} />)}
+          {tab === 'playlists' && (tabResults as PlaylistResult[]).map((playlist) => <PlaylistCard key={playlist.playlistId} playlist={playlist} />)}
+        </div>
+      )
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -121,58 +223,36 @@ export default function Home() {
             type="search"
             placeholder="Search for videos, channels, or playlists..."
             className="flex-grow border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={state.query}
+            onChange={(e) => dispatch({ type: 'SET_QUERY', payload: e.target.value })}
           />
           <Button type="submit" size="icon" disabled={isPending}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
           </Button>
-          <AdvancedSearch onSearch={handleAdvancedSearch} defaultQuery={query} />
+          <AdvancedSearch onSearch={handleAdvancedSearch} defaultQuery={state.query} />
         </div>
       </form>
 
-      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+      <Tabs value={state.activeTab} onValueChange={onTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
           <TabsTrigger value="videos">Videos</TabsTrigger>
           <TabsTrigger value="channels">Channels</TabsTrigger>
           <TabsTrigger value="playlists">Playlists</TabsTrigger>
         </TabsList>
         <TabsContent value="videos" className="mt-6">
-          {isPending && activeTab === 'videos' ? (
-             <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
-              {results.videos.map((video) => (
-                <VideoCard key={video.videoId} video={video} />
-              ))}
-            </div>
-          )}
+          {renderContent('videos')}
         </TabsContent>
         <TabsContent value="channels" className="mt-6">
-           {isPending && activeTab === 'channels' ? (
-             <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
-              {results.channels.map((channel) => (
-                <ChannelCard key={channel.channelId} channel={channel} />
-              ))}
-            </div>
-          )}
+           {renderContent('channels')}
         </TabsContent>
         <TabsContent value="playlists" className="mt-6">
-           {isPending && activeTab === 'playlists' ? (
-             <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
-              {results.playlists.map((playlist) => (
-                <PlaylistCard key={playlist.playlistId} playlist={playlist} />
-              ))}
-            </div>
-          )}
+           {renderContent('playlists')}
         </TabsContent>
       </Tabs>
       
-      { !isPending && results.videos.length === 0 && results.channels.length === 0 && results.playlists.length === 0 &&
+      {renderPagination()}
+
+      { !isPending && results.length === 0 && !state.query &&
         <div className="text-center text-muted-foreground mt-16">
           <p>Ready to start your search.</p>
           <p className="text-sm">Enter a term above to begin exploring YouTube.</p>

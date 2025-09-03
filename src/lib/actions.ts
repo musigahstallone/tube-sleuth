@@ -68,9 +68,11 @@ async function fetcher<T>(
 
 export async function searchVideos(
   query: string,
-  maxResults: number = 25
+  maxResults: number = 25,
+  pageToken?: string | null,
 ): Promise<ApiResponse<VideoResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
+  if (pageToken) params.append('pageToken', pageToken);
   return fetcher(`/api/YouTubeSearch/videos?${params.toString()}`);
 }
 
@@ -85,17 +87,21 @@ export async function advancedSearchVideos(
 
 export async function searchChannels(
   query: string,
-  maxResults: number = 25
+  maxResults: number = 25,
+  pageToken?: string | null,
 ): Promise<ApiResponse<ChannelResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
+  if (pageToken) params.append('pageToken', pageToken);
   return fetcher(`/api/YouTubeSearch/channels?${params.toString()}`);
 }
 
 export async function searchPlaylists(
   query: string,
-  maxResults: number = 25
+  maxResults: number = 25,
+  pageToken?: string | null,
 ): Promise<ApiResponse<PlaylistResult[]>> {
   const params = new URLSearchParams({ query, maxResults: String(maxResults) });
+  if (pageToken) params.append('pageToken', pageToken);
   return fetcher(`/api/YouTubeSearch/playlists?${params.toString()}`);
 }
 

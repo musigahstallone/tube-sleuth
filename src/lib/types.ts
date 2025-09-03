@@ -50,7 +50,7 @@ export interface AdvancedSearchRequest {
   maxResults?: number;
   order?: string | null;
   publishedAfter?: string | null;
-publishedBefore?: string | null;
+  publishedBefore?: string | null;
   regionCode?: string | null;
   relevanceLanguage?: string | null;
   videoDuration?: string | null;
@@ -61,4 +61,6 @@ export interface ApiResponse<T> {
   message: string | null;
   data: T | null;
   timestamp: string;
+  nextPageToken?: string | null;
+  prevPageToken?: string | null;
 }
