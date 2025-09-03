@@ -27,7 +27,7 @@ export default function RelatedVideos({ suggestions, currentVideoId }: RelatedVi
                 <div className="mt-1 w-2 h-2 rounded-full bg-accent shrink-0"></div>
                 <div className="flex-1">
                     <span className="group-hover:text-primary transition-colors">{title}</span>
-                    <Link href={`/?q=${encodeURIComponent(title)}`} legacyBehavior>
+                    <Link href={`/?q=${encodeURIComponent(title)}`}>
                         <Button variant="ghost" size="icon" className="ml-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Search className="h-4 w-4" />
                             <span className="sr-only">Search for this video</span>

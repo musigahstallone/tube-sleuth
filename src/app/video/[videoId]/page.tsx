@@ -8,11 +8,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
 
 export default async function VideoPage({ params }: { params: { videoId: string } }) {
-  if (!params.videoId) {
+  const { videoId } = params;
+  
+  if (!videoId) {
     notFound();
   }
 
-  const videoDetailsResponse = await getVideoDetails(params.videoId);
+  const videoDetailsResponse = await getVideoDetails(videoId);
 
   if (!videoDetailsResponse.data) {
      return (

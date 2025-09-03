@@ -14,6 +14,20 @@ function formatCount(count: bigint | number | null | undefined): string {
     return `${(num / 1000000000).toFixed(1)}B`;
 }
 
+function StatItem({ icon: Icon, value, label }: { icon: React.ElementType, value: string, label: string }) {
+    return (
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-secondary">
+            <div className="bg-primary/10 p-3 rounded-full">
+                <Icon className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+                <div className="text-xl font-bold text-foreground">{value}</div>
+                <div className="text-sm text-muted-foreground">{label}</div>
+            </div>
+        </div>
+    );
+}
+
 export default function VideoInfo({ details }: { details: VideoDetails }) {
   const publishedDate = details.publishedAt ? new Date(details.publishedAt) : null;
   
@@ -41,28 +55,10 @@ export default function VideoInfo({ details }: { details: VideoDetails }) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap gap-4 items-center mb-6 text-center">
-            <div className="flex items-center gap-2 text-sm font-medium">
-                <Eye className="w-5 h-5 text-primary" />
-                <div>
-                    <div className="font-bold">{formatCount(details.viewCount)}</div>
-                    <div className="text-xs text-muted-foreground">Views</div>
-                </div>
-            </div>
-             <div className="flex items-center gap-2 text-sm font-medium">
-                <ThumbsUp className="w-5 h-5 text-primary" />
-                 <div>
-                    <div className="font-bold">{formatCount(details.likeCount)}</div>
-                    <div className="text-xs text-muted-foreground">Likes</div>
-                </div>
-            </div>
-             <div className="flex items-center gap-2 text-sm font-medium">
-                <MessageSquare className="w-5 h-5 text-primary" />
-                 <div>
-                    <div className="font-bold">{formatCount(details.commentCount)}</div>
-                    <div className="text-xs text-muted-foreground">Comments</div>
-                </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <StatItem icon={Eye} value={formatCount(details.viewCount)} label="Views" />
+            <StatItem icon={ThumbsUp} value={formatCount(details.likeCount)} label="Likes" />
+            <StatItem icon={MessageSquare} value={formatCount(details.commentCount)} label="Comments" />
         </div>
         
         <Separator className="my-6" />
