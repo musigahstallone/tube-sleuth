@@ -38,9 +38,9 @@ export interface VideoDetails {
   publishedAt: string | null;
   thumbnailUrl: string | null;
   videoUrl: string | null;
-  viewCount: number | null;
-  likeCount: number | null;
-  commentCount: number | null;
+  viewCount: bigint | null;
+  likeCount: bigint | null;
+  commentCount: bigint | null;
   duration: string | null;
   tags: string[] | null;
 }
@@ -50,7 +50,7 @@ export interface AdvancedSearchRequest {
   maxResults?: number;
   order?: string | null;
   publishedAfter?: string | null;
-  publishedBefore?: string | null;
+publishedBefore?: string | null;
   regionCode?: string | null;
   relevanceLanguage?: string | null;
   videoDuration?: string | null;

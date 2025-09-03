@@ -5,12 +5,13 @@ import { Eye, ThumbsUp, MessageSquare, Clock, CalendarDays, User } from 'lucide-
 import { format, formatDistanceToNow } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 
-function formatCount(count: number | null | undefined): string {
+function formatCount(count: bigint | number | null | undefined): string {
     if (count === null || count === undefined) return 'N/A';
-    if (count < 1000) return count.toString();
-    if (count < 1000000) return `${(count / 1000).toFixed(1)}K`;
-    if (count < 1000000000) return `${(count / 1000000).toFixed(1)}M`;
-    return `${(count / 1000000000).toFixed(1)}B`;
+    const num = Number(count);
+    if (num < 1000) return num.toString();
+    if (num < 1000000) return `${(num / 1000).toFixed(1)}K`;
+    if (num < 1000000000) return `${(num / 1000000).toFixed(1)}M`;
+    return `${(num / 1000000000).toFixed(1)}B`;
 }
 
 export default function VideoInfo({ details }: { details: VideoDetails }) {
