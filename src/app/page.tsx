@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useCallback, useReducer } from 'react';
+import { useState, useTransition, useCallback, useReducer, useEffect } from 'react';
 import {
   searchVideos,
   advancedSearchVideos,
@@ -18,6 +18,7 @@ import ChannelCard from '@/components/search/ChannelCard';
 import PlaylistCard from '@/components/search/PlaylistCard';
 import AdvancedSearch from '@/components/search/AdvancedSearch';
 import { suggestRelatedVideos } from '@/ai/flows/suggest-related-videos';
+import { useSearchParams } from 'next/navigation';
 
 type SearchResultData = VideoResult[] | ChannelResult[] | PlaylistResult[];
 
@@ -37,28 +38,28 @@ type SearchState = {
   query: string;
   activeTab: 'videos' | 'channels' | 'playlists';
   cache: SearchCache;
-  currentPageToken: string | null;
+  isHydrated: boolean;
 };
 
 type SearchAction =
   | { type: 'SET_QUERY'; payload: string }
   | { type: 'SET_ACTIVE_TAB'; payload: 'videos' | 'channels' | 'playlists' }
   | { type: 'SET_SEARCH_RESULTS'; payload: { tab: 'videos' | 'channels' | 'playlists', query: string, data: ApiResponse<any> } }
-  | { type: 'SET_CURRENT_PAGE_TOKEN'; payload: string | null };
+  | { type: 'HYDRATE_STATE'; payload: Partial<SearchState> };
 
 const initialState: SearchState = {
   query: '',
   activeTab: 'videos',
   cache: { videos: {}, channels: {}, playlists: {} },
-  currentPageToken: null,
+  isHydrated: false,
 };
 
 function searchReducer(state: SearchState, action: SearchAction): SearchState {
   switch (action.type) {
     case 'SET_QUERY':
-      return { ...state, query: action.payload, currentPageToken: null };
+      return { ...state, query: action.payload };
     case 'SET_ACTIVE_TAB':
-      return { ...state, activeTab: action.payload, currentPageToken: state.cache[action.payload][state.query]?.nextPageToken || null };
+      return { ...state, activeTab: action.payload };
     case 'SET_SEARCH_RESULTS': {
       const { tab, query, data } = action.payload;
       const newCacheForTab = {
@@ -72,20 +73,63 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
       return { 
           ...state, 
           cache: { ...state.cache, [tab]: newCacheForTab },
-          currentPageToken: data.nextPageToken || null,
       };
     }
-    case 'SET_CURRENT_PAGE_TOKEN':
-        return { ...state, currentPageToken: action.payload };
+    case 'HYDRATE_STATE':
+        return { ...state, ...action.payload, isHydrated: true };
     default:
       return state;
   }
 }
 
+const CACHE_KEY = 'tubeSleuthSearchCache';
+
 export default function Home() {
   const [state, dispatch] = useReducer(searchReducer, initialState);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+
+  // Hydrate state from localStorage on initial render
+  useEffect(() => {
+    try {
+      const storedState = localStorage.getItem(CACHE_KEY);
+      if (storedState) {
+        const parsedState = JSON.parse(storedState);
+        dispatch({ type: 'HYDRATE_STATE', payload: parsedState });
+      } else {
+        dispatch({ type: 'HYDRATE_STATE', payload: {} });
+      }
+    } catch (error) {
+      console.error("Could not load state from localStorage", error);
+      dispatch({ type: 'HYDRATE_STATE', payload: {} });
+    }
+  }, []);
+
+  // Persist state to localStorage whenever it changes
+  useEffect(() => {
+    if (state.isHydrated) {
+      try {
+        const stateToStore = {
+          query: state.query,
+          activeTab: state.activeTab,
+          cache: state.cache
+        };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(stateToStore));
+      } catch (error) {
+        console.error("Could not save state to localStorage", error);
+      }
+    }
+  }, [state]);
+
+  // Handle search from URL query parameter on initial load
+   useEffect(() => {
+    const urlQuery = searchParams.get('q');
+    if (urlQuery && state.isHydrated && urlQuery !== state.query) {
+      dispatch({ type: 'SET_QUERY', payload: urlQuery });
+      handleSearch(urlQuery, state.activeTab);
+    }
+  }, [searchParams, state.isHydrated]);
 
   const currentCacheEntry = state.cache[state.activeTab][state.query];
   const results = currentCacheEntry?.results || [];
@@ -103,7 +147,7 @@ export default function Home() {
     startTransition(async () => {
       try {
         let response;
-        const maxResults = 12;
+        const maxResults = 12; // Fetch 12 results for better grid layout
         if (currentTab === 'videos') {
           response = await searchVideos(currentQuery, maxResults, pageToken);
         } else if (currentTab === 'channels') {
@@ -188,24 +232,28 @@ export default function Home() {
         </div>
     );
   }
-
+  
   const renderContent = (tab: 'videos' | 'channels' | 'playlists') => {
-      const tabResults = state.cache[tab][state.query]?.results || [];
-      
-      if (isPending && state.activeTab === tab) {
-        return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-      }
-      if(tabResults.length === 0 && state.query) {
-        return <div className="text-center text-muted-foreground mt-16"><p>No results found for "{state.query}".</p></div>
-      }
+    const tabResults = state.cache[tab][state.query]?.results || [];
 
-      return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
-          {tab === 'videos' && (tabResults as VideoResult[]).map((video) => <VideoCard key={video.videoId} video={video} />)}
-          {tab === 'channels' && (tabResults as ChannelResult[]).map((channel) => <ChannelCard key={channel.channelId} channel={channel} />)}
-          {tab === 'playlists' && (tabResults as PlaylistResult[]).map((playlist) => <PlaylistCard key={playlist.playlistId} playlist={playlist} />)}
-        </div>
-      )
+    if (!state.isHydrated) {
+        return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    }
+    
+    if (isPending && state.activeTab === tab) {
+      return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    }
+    if(tabResults.length === 0 && state.query) {
+      return <div className="text-center text-muted-foreground mt-16"><p>No results found for "{state.query}".</p></div>
+    }
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 animate-in fade-in-50">
+        {tab === 'videos' && (tabResults as VideoResult[]).map((video) => <VideoCard key={video.videoId} video={video} />)}
+        {tab === 'channels' && (tabResults as ChannelResult[]).map((channel) => <ChannelCard key={channel.channelId} channel={channel} />)}
+        {tab === 'playlists' && (tabResults as PlaylistResult[]).map((playlist) => <PlaylistCard key={playlist.playlistId} playlist={playlist} />)}
+      </div>
+    )
   }
 
   return (
@@ -252,7 +300,7 @@ export default function Home() {
       
       {renderPagination()}
 
-      { !isPending && results.length === 0 && !state.query &&
+      { !isPending && results.length === 0 && !state.query && state.isHydrated &&
         <div className="text-center text-muted-foreground mt-16">
           <p>Ready to start your search.</p>
           <p className="text-sm">Enter a term above to begin exploring YouTube.</p>

@@ -7,8 +7,7 @@ import RelatedVideos from '@/components/video/RelatedVideos';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
 
-export default async function VideoPage({ params }: { params: { videoId: string } }) {
-  const { videoId } = params;
+export default async function VideoPage({ params: { videoId } }: { params: { videoId: string } }) {
   
   if (!videoId) {
     notFound();

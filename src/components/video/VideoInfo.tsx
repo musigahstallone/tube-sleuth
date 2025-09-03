@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Eye, ThumbsUp, MessageSquare, Clock, CalendarDays, User } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import Link from 'next/link';
 
 function formatCount(count: bigint | number | null | undefined): string {
     if (count === null || count === undefined) return 'N/A';
@@ -72,7 +73,9 @@ export default function VideoInfo({ details }: { details: VideoDetails }) {
             <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Tags</h3>
             <div className="flex flex-wrap gap-2">
               {details.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">{tag}</Badge>
+                <Link key={tag} href={`/?q=${encodeURIComponent(tag)}`} passHref>
+                    <Badge variant="secondary" className="cursor-pointer hover:bg-primary/20">{tag}</Badge>
+                </Link>
               ))}
             </div>
           </div>
