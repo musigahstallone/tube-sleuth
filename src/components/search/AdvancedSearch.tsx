@@ -90,7 +90,7 @@ export default function AdvancedSearch({ onSearch, defaultQuery }: AdvancedSearc
                 <FormItem>
                   <FormLabel>Search Query</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Next.js 14 tutorials" {...field} defaultValue={defaultQuery} />
+                    <Input placeholder="e.g., Next.js 14 tutorials" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
