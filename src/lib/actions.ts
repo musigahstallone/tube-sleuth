@@ -21,6 +21,7 @@ async function fetcher<T>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        'X-API-KEY': process.env.YOUTUBE_API_KEY || '',
         ...options.headers,
       },
     });
